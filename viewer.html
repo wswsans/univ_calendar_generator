@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ICSイベントビューアー</title>
+  <script src="https://cdn.jsdelivr.net/npm/ical.js@1.4.0/build/ical.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 2rem;
+    }
+
+    #controls {
+      margin-bottom: 1rem;
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    #calendarInfo {
+      margin-bottom: 1rem;
+    }
+
+    #calendarInfo h2 {
+      margin: 0.2rem 0;
+    }
+
+    #cardContainer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .event-card {
+      border: 2px solid #333;
+      border-radius: 8px;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .card-title {
+      background-color: #666;
+      color: white;
+      font-weight: bold;
+      padding: 0.5rem;
+      font-size: 1.1rem;
+    }
+
+    .card-section {
+      border-top: 1px solid #ccc;
+      padding: 0.5rem;
+      font-size: 0.9rem;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>ICSイベントビューアー</h1>
+
+  <div id="controls">
+    <input type="file" id="icsInput" accept=".ics">
+    <label>
+      表示列数:
+      <input type="number" id="columnCount" value="4" min="1" max="10" style="width: 60px;">
+    </label>
+  </div>
+
+  <div id="calendarInfo"></div>
+  <div id="cardContainer"></div>
+
+  <script>
+    const icsInput = document.getElementById('icsInput')
+    const cardContainer = document.getElementById('cardContainer')
+    const calendarInfo = document.getElementById('calendarInfo')
+    const columnCountInput = document.getElementById('columnCount')
+
+    function updateCardWidth() {
+      const cols = parseInt(columnCountInput.value, 10) || 4
+      const percent = 100 / cols - 2
+      document.querySelectorAll('.event-card').forEach(card => {
+        card.style.width = `${percent}%`
+        card.style.minWidth = "200px"
+      })
+    }
+
+    columnCountInput.addEventListener('input', updateCardWidth)
+
+    icsInput.addEventListener('change', function(event) {
+      const file = event.target.files[0]
+      if (!file) return
+
+      const reader = new FileReader()
+      reader.onload = function(e) {
+        const jcalData = ICAL.parse(e.target.result)
+        const comp = new ICAL.Component(jcalData)
+        const events = comp.getAllSubcomponents("vevent")
+
+        // カレンダー情報を抽出
+        // const props = ["X-WR-CALNAME", "X-WR-CALDESC", "X-WR-RELCALID"]
+        // calendarInfo.innerHTML = props.map(prop => {
+        //   const val = comp.getFirstPropertyValue(prop)
+        //   return val ? `<h2>${prop}: ${val}</h2>` : ""
+        // }).join("")
+        // カレンダー情報を抽出（ローレベル対応）
+        const props = comp.getAllProperties()
+        const xProps = {}
+        for (const p of props) {
+          const name = p.jCal[0]
+          if (name.startsWith("x-wr-")) {
+            xProps[name] = p.jCal.slice(-1)[0] // name.slice(5) を使えば見た目良くはなる
+          }
+        }
+
+        calendarInfo.innerHTML = Object.entries(xProps).map(([key, val]) =>
+          `<h4>${key}: ${val}</h4>`
+        ).join("")
+
+        // イベントカード描画
+        cardContainer.innerHTML = ""
+
+        events.forEach(evtComp => {
+          const evt = new ICAL.Event(evtComp)
+          const title = evt.summary || "（タイトルなし）"
+          const start = evt.startDate.toJSDate().toLocaleString("ja-JP", {
+            year: "numeric", month: "2-digit", day: "2-digit",
+            hour: "2-digit", minute: "2-digit", hour12: false
+          })
+          const end = evt.endDate.toJSDate().toLocaleString("ja-JP", {
+            year: "numeric", month: "2-digit", day: "2-digit",
+            hour: "2-digit", minute: "2-digit", hour12: false
+          })
+          const desc = evt.description ? evt.description.replace(/\\n/g, '\n') : "（説明なし）"
+
+          const card = document.createElement("div")
+          card.className = "event-card"
+          card.innerHTML = `
+            <div class="card-title">${title}</div>
+            <div class="card-section"><strong>開始日</strong><br>${start}</div>
+            <div class="card-section"><strong>終了日</strong><br>${end}</div>
+            <div class="card-section">${desc}</div>
+          `
+          cardContainer.appendChild(card)
+        })
+
+        updateCardWidth()
+      }
+
+      reader.readAsText(file)
+    })
+  </script>
+</body>
+</html>
